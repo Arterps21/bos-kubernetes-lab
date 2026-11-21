@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/Arterps21/bos-kubernetes-lab.git
-    targetRevision: main
+    targetRevision: master
     path: apps/demo
   destination:
     server: https://kubernetes.default.svc
