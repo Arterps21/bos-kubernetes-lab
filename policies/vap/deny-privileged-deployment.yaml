@@ -1,0 +1,41 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bos-deny-privileged-deployment
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments"]
+  validations:
+    - expression: >
+        object.spec.template.spec.containers.all(c,
+          !has(c.securityContext) ||
+          !has(c.securityContext.privileged) ||
+          c.securityContext.privileged == false
+        )
+      message: "Privileged containers in Deployments are forbidden"
+
+    - expression: >
+        !has(object.spec.template.spec.initContainers) ||
+        object.spec.template.spec.initContainers.all(c,
+          !has(c.securityContext) ||
+          !has(c.securityContext.privileged) ||
+          c.securityContext.privileged == false
+        )
+      message: "Privileged init containers in Deployments are forbidden"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bos-deny-privileged-deployment-binding
+spec:
+  policyName: bos-deny-privileged-deployment
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        bos-security: enabled
