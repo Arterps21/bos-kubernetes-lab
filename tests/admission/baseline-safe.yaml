@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: baseline-safe
+  namespace: bos-tests
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+  containers:
+    - name: app
+      image: nginxinc/nginx-unprivileged:stable-alpine
+      command: ["sleep", "3600"]
+      securityContext:
+        privileged: false
+      resources:
+        limits:
+          cpu: 200m
+          memory: 128Mi

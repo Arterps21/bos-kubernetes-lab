@@ -1,0 +1,82 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bos-baseline-pod
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - expression: >
+        !has(object.spec.hostNetwork) || object.spec.hostNetwork == false
+      message: "hostNetwork is forbidden"
+
+    - expression: >
+        !has(object.spec.volumes) ||
+        object.spec.volumes.all(v, !has(v.hostPath))
+      message: "hostPath volumes are forbidden"
+
+    - expression: >
+        has(object.spec.securityContext) &&
+        has(object.spec.securityContext.runAsNonRoot) &&
+        object.spec.securityContext.runAsNonRoot == true &&
+        (!has(object.spec.securityContext.runAsUser) ||
+         object.spec.securityContext.runAsUser != 0) &&
+        object.spec.containers.all(c,
+          !has(c.securityContext) ||
+          ((!has(c.securityContext.runAsNonRoot) ||
+            c.securityContext.runAsNonRoot == true) &&
+           (!has(c.securityContext.runAsUser) ||
+            c.securityContext.runAsUser != 0))
+        ) &&
+        (!has(object.spec.initContainers) ||
+         object.spec.initContainers.all(c,
+           !has(c.securityContext) ||
+           ((!has(c.securityContext.runAsNonRoot) ||
+             c.securityContext.runAsNonRoot == true) &&
+            (!has(c.securityContext.runAsUser) ||
+             c.securityContext.runAsUser != 0))
+         ))
+      message: "Containers must run as non-root"
+
+    - expression: >
+        object.spec.containers.all(c,
+          has(c.resources) &&
+          has(c.resources.limits) &&
+          'cpu' in c.resources.limits &&
+          'memory' in c.resources.limits
+        ) &&
+        (!has(object.spec.initContainers) ||
+         object.spec.initContainers.all(c,
+           has(c.resources) &&
+           has(c.resources.limits) &&
+           'cpu' in c.resources.limits &&
+           'memory' in c.resources.limits
+         ))
+      message: "CPU and memory limits are required"
+
+    - expression: >
+        object.spec.containers.all(c,
+          !c.image.startsWith('bad.registry.local/')
+        ) &&
+        (!has(object.spec.initContainers) ||
+         object.spec.initContainers.all(c,
+           !c.image.startsWith('bad.registry.local/')
+         ))
+      message: "Images from bad.registry.local are forbidden"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bos-baseline-pod-binding
+spec:
+  policyName: bos-baseline-pod
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        bos-security: enabled
