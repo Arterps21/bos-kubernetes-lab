@@ -1,0 +1,46 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: bosprivilegedcontainers
+spec:
+  crd:
+    spec:
+      names:
+        kind: BosPrivilegedContainers
+      validation:
+        openAPIV3Schema:
+          type: object
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      code:
+        - engine: Rego
+          source:
+            version: "v1"
+            rego: |
+              package bosprivilegedcontainers
+
+              pod_spec := input.review.object.spec if {
+                input.review.kind.kind == "Pod"
+              }
+
+              pod_spec := input.review.object.spec.template.spec if {
+                input.review.kind.kind == "Deployment"
+              }
+
+              violation contains {"msg": msg} if {
+                c := array.concat(
+                  pod_spec.containers,
+                  object.get(pod_spec, "initContainers", [])
+                )[_]
+
+                object.get(
+                  object.get(c, "securityContext", {}),
+                  "privileged",
+                  false
+                ) == true
+
+                msg := sprintf(
+                  "Privileged container is forbidden: %s",
+                  [c.name]
+                )
+              }
